@@ -1,0 +1,110 @@
+org     100h
+
+DISPLAY macro msg
+        mov dx, offset msg
+        mov ah, 9
+        int 21h
+ENDM
+        
+        
+BACKSPACE macro   
+
+        mov al,00h
+	    mov ah, 0eh
+	    int 10h    
+	    
+	    mov al,8
+	    mov ah, 0eh
+	    int 10h
+ENDM
+
+GOTOXY  macro   col, row
+        mov     dh, row
+        mov     dl, col
+        mov     bh, 0
+        mov     ah, 02h
+        int     10h
+ENDM
+
+MESSAGE macro msg
+        mov     ax, 40h
+        mov     es, ax
+        mov bh, 0011_1111b
+        mov     al, es:[84h]
+        inc al
+        GOTOXY  0, al
+        DISPLAY msg
+        ;GOTOXY 0,85h
+ENDM
+
+start:    
+
+        mov dx, 40h
+        mov es, dx  ; for getting screen parameters.
+        mov ah, 06h ; scroll up function id.
+        mov bh, 0011_1111b  ; attribute for new lines.
+        mov ch, 0   ; upper row.
+        mov cl, 0   ; upper col.
+        mov di, 84h ; rows on screen -1,
+        mov dh, es:[di] ; lower row (byte).
+        dec dh  ; don't scroll bottom line.
+        mov di, 4ah ; columns on screen,
+        mov dl, es:[di]
+        dec dl  ; lower col.
+        int 10h
+
+
+DISPLAY msg1
+
+GOTOXY 0,85h
+DISPLAY msg3
+
+again:  
+
+        mov     ah, 1
+        int     16h
+
+
+        mov     ah, 0
+        int     16h
+        
+        mov     ah, 0eh
+        int     10h
+
+        cmp     al, 1bh
+        jz      exit
+        
+        cmp al,08h
+        jnz skip1
+        BACKSPACE 
+
+skip1:        
+        cmp     al, 0dh
+        jnz     skip  
+        ;DISPLAY msg2
+        MESSAGE command_accept           
+        DISPLAY msg3        
+skip:
+jmp     again
+
+exit:
+ret
+
+
+var1 dw    
+var2 dw 
+var3 dw 
+var4 dw 
+
+   
+msg1  db "iPRETER beta version", 0Dh,0Ah
+      db "A X86 compatible high level language", 0Dh,0Ah,"$"
+
+msg2 db 0dh,0ah,"$"
+
+msg3 db ">$"
+
+command_accept db "COMMAND ACCEPTED",0dh,0ah,"$"
+
+end      
+
