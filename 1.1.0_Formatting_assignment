@@ -2,12 +2,12 @@
 ASSUME CS:CODE DS:DATA SS:STACK
 
 STACK SEGMENT
-STACKDATA DB 200H DUP(?)
+STACKDATA DB 200H DUP(?) ;Space reserved for stack segment
 STACK ENDS
 
 DATA SEGMENT 
     
-    BUFFER DB 50 DUP(?)
+    BUFFER DB 50 DUP(?) ;buffer containing variables and their values (every keystroke)
 
 DATA ENDS
 
@@ -94,7 +94,7 @@ AGAIN:
         MOV     AH, 0
         INT     16H
         
-        PUSH AX
+        PUSH AX      ;save contents of registers to stack 
         PUSH ES
         PUSH DI
         PUSH CX
@@ -103,18 +103,18 @@ AGAIN:
         MOV AH,0
         MOV AX,SEG BUFFER
         MOV ES,AX
-        MOV DI,OFFSET BUFFER 
+        MOV DI,OFFSET BUFFER     ;initialize buffer and size of buffer stored in CX
         MOV CX,0050H
         STD
         REP STOSB
-        ;PROCESS
         
-        POP CX
-        POP DI
+        
+        POP CX      ;restore content of registers
+        POP DI     
         POP ES
         POP AX  
         
-        CALL CHECK
+        CALL CHECK   ; call subroutine to check whether character entered is ';' or not 
         
         MOV     AH, 0EH
         INT     10H
@@ -152,12 +152,12 @@ MSG3 DB ">$"
 COMMAND_ACCEPT DB "COMMAND ACCEPTED",0DH,0AH,"$" 
 
 PROC CHECK NEAR
-    MOV BL,';' 
+    MOV BL,';'         ;check whether character entered is ';' or not
     CMP AL,BL
     JZ NEW
     RET
 NEW:
-    CALL PROCESS
+    CALL PROCESS     ;call procedure to obtain value of variable entered before ';' e.g. Line 1: A=5, Line2: A=?; 
     RET
     
 CHECK ENDP
