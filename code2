@@ -1,0 +1,390 @@
+PUTC    MACRO   CHAR
+        PUSH    AX
+        MOV     AL, CHAR
+        MOV     AH, 0EH
+        INT     10H     
+        POP     AX
+ENDM
+
+
+GOTOXY  MACRO   COL, ROW
+        PUSH    AX
+        PUSH    BX
+        PUSH    DX
+        MOV     AH, 02H
+        MOV     DH, ROW
+        MOV     DL, COL
+        MOV     BH, 0
+        INT     10H
+        POP     DX
+        POP     BX
+        POP     AX
+ENDM
+
+
+PRINT MACRO X, Y, ATTRIB, SDAT
+LOCAL   S_DCL, SKIP_DCL, S_DCL_END
+        PUSHA
+        MOV DX, CS
+        MOV ES, DX
+        MOV AH, 13H
+        MOV AL, 1
+        MOV BH, 0
+        MOV BL, ATTRIB
+        MOV CX, OFFSET S_DCL_END - OFFSET S_DCL
+        MOV DL, X
+        MOV DH, Y
+        MOV BP, OFFSET S_DCL
+        INT 10H
+        POPA
+        JMP SKIP_DCL
+        S_DCL DB SDAT
+        S_DCL_END DB 0
+        SKIP_DCL:    
+ENDM
+
+ORG 0000H
+
+JMP START 
+
+MSG  DB "INTERPRETER 1.0", 0 
+
+CMD_SIZE        EQU 10    ; SIZE OF COMMAND_BUFFER
+COMMAND_BUFFER  DB CMD_SIZE DUP("B")
+CLEAN_STR       DB CMD_SIZE DUP(" "), 0
+PROMPT          DB ">", 0
+
+CHELP    DB "HELP", 0
+CHELP_TAIL:
+CCLS     DB "CLS", 0
+CCLS_TAIL:
+
+HELP_MSG DB "THANK YOU FOR CHOOSING MICRO-OS!", 0DH,0AH
+         DB "THE SHORT LIST OF SUPPORTED COMMANDS:", 0DH,0AH
+         DB "HELP   - PRINT OUT THIS LIST.", 0DH,0AH
+         DB "CLS    - CLEAR THE SCREEN.", 0DH,0AH
+         DB "REBOOT - REBOOT THE MACHINE.", 0DH,0AH
+         DB "QUIT   - SAME AS REBOOT.", 0DH,0AH 
+         DB "EXIT   - SAME AS QUIT.", 0DH,0AH
+         DB "MORE TO COME!", 0DH,0AH, 0
+
+UNKNOWN  DB "UNKNOWN COMMAND: " , 0    
+ACCEPTED DB "COMMAND ACCEPTED : ",0
+
+VALUES DB 10 DUP(?)
+NAMES DB 5 DUP(?)
+
+START:
+
+PUSH    CS
+POP     DS
+
+        MOV     AH, 00H     ;video in 80X25 mode
+        MOV     AL, 03H
+        INT     10H
+
+        MOV     AX, 1003H
+        MOV     BX, 0       ;disable blink
+        INT     10H
+
+        CALL    CLEAR_SCREEN
+                     
+        LEA     SI,MSG
+        CALL    PRINT_STRING
+
+
+FINALLOOP:
+        CALL    GET_COMMAND
+
+        CALL    PROCESS_CMD
+
+
+        JMP FINALLOOP
+
+
+GET_COMMAND PROC NEAR
+
+        MOV     AX, 40H
+        MOV     ES, AX
+        MOV     AL, ES:[84H]
+
+        GOTOXY  0, AL
+
+
+        LEA     SI, CLEAN_STR
+        CALL    PRINT_STRING
+
+        GOTOXY  0, AL
+  
+        LEA     SI, PROMPT 
+        CALL    PRINT_STRING
+
+    
+        MOV     DX, CMD_SIZE 
+        LEA     DI, COMMAND_BUFFER
+        CALL    GET_STRING
+
+
+        RET
+GET_COMMAND ENDP
+
+
+
+PROCESS_CMD PROC    NEAR
+
+        PUSH    DS
+        POP     ES
+
+        CLD
+        
+        LEA     DI, COMMAND_BUFFER
+        MOV     CX, CMD_SIZE
+        MOV     AL,3dh              ;FIND =
+        MOV     DX,0000H
+FIND:   SCASB
+        JZ      ASSIGN
+        INC DX
+        LOOP FIND
+     
+
+; COMPARE COMMAND BUFFER WITH 'CLS'
+        LEA     SI, COMMAND_BUFFER
+        MOV     CX, CCLS_TAIL - OFFSET CCLS  ; SIZE OF ['CLS',0] STRING.
+        LEA     DI, CCLS
+        REPE    CMPSB
+        JNE     NOT_CLS
+        JMP     CLS_COMMAND
+        NOT_CLS:
+
+; IGNORE EMPTY LINES
+        CMP     COMMAND_BUFFER, 0
+        JZ      PROCESSED
+
+
+; UNKNOWN COMMAND
+
+        MOV     AL, 1
+        CALL    SCROLL_T_AREA
+
+        MOV     AX, 40H
+        MOV     ES, AX
+        MOV     AL, ES:[84H]
+        DEC     AL
+        GOTOXY  0, AL
+
+        LEA     SI, UNKNOWN
+        CALL    PRINT_STRING 
+        
+
+        LEA     SI, COMMAND_BUFFER
+        CALL    PRINT_STRING
+
+        JMP     PROCESSED
+
+ASSIGN:
+
+ 
+        MOV     AL,1
+        CALL    SCROLL_T_AREA
+
+
+        MOV     AX, 40H
+        MOV     ES, AX
+        MOV     AL, ES:[84H]
+        SUB     AL, 1
+        GOTOXY  0, AL
+
+        LEA     SI, ACCEPTED
+        CALL    PRINT_STRING
+        
+        LEA     SI, COMMAND_BUFFER
+        CALL    PRINT_STRING
+        
+        CALL STORE
+        
+        JMP     PROCESSED
+
+
+
+
+; +++++ 'CLS' COMMAND ++++++
+CLS_COMMAND:
+CALL    CLEAR_SCREEN
+JMP     PROCESSED
+
+
+PROCESSED:
+        RET
+PROCESS_CMD ENDP
+
+
+STORE PROC NEAR
+        
+        PUSH DS
+        POP ES
+        
+        LEA DI,NAMES
+        CLD
+        MOV CX,DX
+        REP MOVSB
+        
+        PUSH SI
+        
+        LEA SI,NAMES
+        CALL PRINT_STRING
+        
+        POP SI
+        
+        INC DX
+        ADD DX,SI
+        
+        ;MOV DI,OFFSET VALUES
+        ;MOV [DX],12H 
+        
+        
+        RET 
+STORE ENDP     
+
+SCROLL_T_AREA   PROC    NEAR
+    
+        MOV DX, 40H
+        MOV ES, DX  
+        MOV AH, 06H 
+        MOV BH, 07  
+        MOV CH, 0   
+        MOV CL, 0   
+        MOV DI, 84H 
+        MOV DH, ES:[DI] 
+        DEC DH  
+        MOV DI, 4AH 
+        MOV DL, ES:[DI]
+        DEC DL  
+        INT 10H
+
+        RET
+SCROLL_T_AREA   ENDP
+
+
+GET_STRING      PROC    NEAR
+        PUSH    AX
+        PUSH    CX
+        PUSH    DI
+        PUSH    DX
+
+        MOV     CX, 0                   ; CHAR COUNTER.
+
+        CMP     DX, 1                   ; BUFFER TOO SMALL?
+        JBE     EMPTY_BUFFER            ;
+
+        DEC     DX                      ; RESERVE SPACE FOR LAST ZERO.
+
+WAIT_FOR_KEY:
+
+        MOV     AH, 0                   ; GET PRESSED KEY.
+        INT     16H
+
+        CMP     AL, 0DH                 ; 'RETURN' PRESSED?
+        JZ      EXIT
+
+
+        CMP     AL, 8                   ; 'BACKSPACE' PRESSED?
+        JNE     ADD_TO_BUFFER
+        JCXZ    WAIT_FOR_KEY            ; NOTHING TO REMOVE!
+        DEC     CX
+        DEC     DI
+        PUTC    8                       ; BACKSPACE.
+        PUTC    ' '                     ; CLEAR POSITION.
+        PUTC    8                       ; BACKSPACE AGAIN.
+        JMP     WAIT_FOR_KEY
+
+ADD_TO_BUFFER:
+
+        CMP     CX, DX          ; BUFFER IS FULL?
+        JAE     WAIT_FOR_KEY    ; IF SO WAIT FOR 'BACKSPACE' OR 'RETURN'...
+
+        MOV     [DI], AL
+        INC     DI
+        INC     CX
+        
+        MOV     AH, 0EH
+        INT     10H
+
+JMP     WAIT_FOR_KEY
+
+EXIT:
+
+        MOV     [DI], 0
+
+EMPTY_BUFFER:
+
+        POP     DX
+        POP     DI
+        POP     CX
+        POP     AX
+        RET
+GET_STRING      ENDP
+
+
+
+
+PRINT_STRING PROC NEAR
+        PUSH    AX      
+        PUSH    SI      
+
+NEXT_CHAR:      
+        MOV     AL, [SI]
+        CMP     AL, 0
+        JZ      PRINTED
+        INC     SI
+        MOV     AH, 0EH
+        INT     10H
+        JMP     NEXT_CHAR
+PRINTED:
+
+POP     SI      
+POP     AX     
+
+RET
+PRINT_STRING ENDP
+
+CLEAR_SCREEN PROC NEAR
+        PUSH    AX      
+        PUSH    DS     
+        PUSH    BX     
+        PUSH    CX     
+        PUSH    DI     
+
+        MOV     AX, 40H
+        MOV     DS, AX      
+        MOV     AH, 06H
+        MOV     AL, 0  
+        MOV     BH, 1011_0000B 
+        MOV     CH, 0 
+        MOV     CL, 0
+        MOV     DI, 84H 
+        MOV     DH, [DI] 
+        MOV     DI, 4AH 
+        MOV     DL, [DI]
+        DEC     DL     
+        INT     10H
+
+        
+        MOV     BH, 0   ; CURRENT PAGE.
+        MOV     DL, 0   ; COL.
+        MOV     DH, 0   ; ROW.
+        MOV     AH, 02
+        INT     10H
+
+        POP     DI      ; RE-STORE REGISTERS...
+        POP     CX      ;
+        POP     BX      ;
+        POP     DS      ;
+        POP     AX      ;
+
+        RET
+CLEAR_SCREEN ENDP
+
+
+
+
+
