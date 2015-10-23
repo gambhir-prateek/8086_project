@@ -1,0 +1,190 @@
+
+ASSUME CS:CODE DS:DATA SS:STACK
+
+STACK SEGMENT
+STACKDATA DB 200H DUP(?)
+STACK ENDS
+
+DATA SEGMENT 
+    
+    BUFFER DB 50 DUP(?)
+
+DATA ENDS
+
+CODE SEGMENT
+    
+
+        
+       
+    
+DISPLAY MACRO MSG
+        MOV DX, OFFSET MSG
+        MOV AH, 9
+        INT 21H
+ENDM
+        
+        
+BACKSPACE MACRO   
+
+        MOV AL,00H
+	    MOV AH, 0EH
+	    INT 10H    
+	    
+	    MOV AL,8
+	    MOV AH, 0EH
+	    INT 10H
+ENDM
+
+GOTOXY  MACRO   COL, ROW
+        MOV     DH, ROW
+        MOV     DL, COL
+        MOV     BH, 0
+        MOV     AH, 02H
+        INT     10H
+ENDM
+
+MESSAGE MACRO MSG
+        MOV     AX, 40H
+        MOV     ES, AX
+        MOV BH, 0011_1111B
+        MOV     AL, ES:[84H]
+        INC AL
+        GOTOXY  0, AL
+        DISPLAY MSG
+        ;GOTOXY 0,85H
+ENDM
+
+START:  ;ORG     100H   
+      
+        MOV AX,STACK
+        MOV SS,AX
+        MOV AX,0000H
+        MOV BX,0000H
+        MOV CX,0000H
+        MOV DX,0000H
+        MOV DX, 40H
+        MOV ES, DX  ; FOR GETTING SCREEN PARAMETERS.
+        MOV AH, 06H ; SCROLL UP FUNCTION ID.
+        MOV BH, 0011_1111B  ; ATTRIBUTE FOR NEW LINES.
+        MOV CH, 0   ; UPPER ROW.
+        MOV CL, 0   ; UPPER COL.
+        MOV DI, 84H ; ROWS ON SCREEN -1,
+        MOV DH, ES:[DI] ; LOWER ROW (BYTE).
+        DEC DH  ; DON'T SCROLL BOTTOM LINE.
+        MOV DI, 4AH ; COLUMNS ON SCREEN,
+        MOV DL, ES:[DI]
+        DEC DL  ; LOWER COL.
+        INT 10H
+
+
+DISPLAY MSG1
+
+GOTOXY 0,85H
+DISPLAY MSG3
+
+AGAIN:  
+
+        
+        
+        MOV     AH, 1
+        INT     16H
+         
+        
+
+        MOV     AH, 0
+        INT     16H
+        
+        PUSH AX
+        PUSH ES
+        PUSH DI
+        PUSH CX
+        
+        
+        MOV AH,0
+        MOV AX,SEG BUFFER
+        MOV ES,AX
+        MOV DI,OFFSET BUFFER 
+        MOV CX,0050H
+        STD
+        REP STOSB
+        ;PROCESS
+        
+        POP CX
+        POP DI
+        POP ES
+        POP AX  
+        
+        CALL CHECK
+        
+        MOV     AH, 0EH
+        INT     10H
+
+        CMP     AL, 1BH
+        JZ      EXIT
+        
+        CMP AL,08H
+        JNZ SKIP1
+        BACKSPACE 
+
+SKIP1:        
+        CMP     AL, 0DH
+        JNZ     SKIP  
+        DISPLAY MSG2  
+         
+        MESSAGE COMMAND_ACCEPT           
+        DISPLAY MSG3        
+SKIP:
+JMP     AGAIN
+
+EXIT:
+RET
+
+
+
+   
+MSG1  DB "IPRETER BETA VERSION", 0DH,0AH
+      DB "A X86 COMPATIBLE HIGH LEVEL LANGUAGE", 0DH,0AH,"$"
+
+MSG2 DB 0DH,0AH,"$"
+
+MSG3 DB ">$"
+
+COMMAND_ACCEPT DB "COMMAND ACCEPTED",0DH,0AH,"$" 
+
+PROC CHECK NEAR
+    MOV BL,';' 
+    CMP AL,BL
+    JZ NEW
+    RET
+NEW:
+    CALL PROCESS
+    RET
+    
+CHECK ENDP
+    
+PROC PROCESS NEAR
+        
+        POP DI
+        POP ES
+        MOV AL,'?'
+        REPNE SCASB
+        DEC DI
+        DEC DI
+        MOV AL,[DI]
+        STD
+        REPNE SCASB
+        INC DI
+        INC DI
+        MOV AL,[DI] 
+        PUSH ES
+        PUSH DI
+        RET
+        
+PROCESS ENDP
+        
+    
+    
+
+END      
+
+
